@@ -36,7 +36,7 @@ export default class DnsService implements DnsServiceInterface {
   }
 
   private handleOnData(data: DnsDataInterface): void {
-    const { address, serviceName, method, port } = data;
+    const { method } = data;
 
     if (method === "SET") {
       this.saveServer(data);
@@ -58,15 +58,44 @@ export default class DnsService implements DnsServiceInterface {
         connection.write("ERROR DATA");
         return;
       }
-
-      this.handleOnData(info);
+      const { remoteAddress, remotePort } = connection;
+      // esses dois so nao vao existir se a conexao for encerrada ou destruida
+      if (remoteAddress && remotePort) {
+        this.handleOnData({
+          ...info,
+          remoteAddress: remoteAddress,
+          remotePort,
+        });
+      }
     });
 
-    connection.on("end", function () {
+    connection.on("end", () => {
       console.log("client disconnected");
+      const { remoteAddress, remotePort } = connection;
+      // esses dois so nao vao existir se a conexao for encerrada ou destruida
+      if (remoteAddress && remotePort) {
+        this.removeServer(remoteAddress, remotePort);
+      }
     });
 
     connection.pipe(connection);
+  }
+
+  private removeServer(remoteAddress: string, remotePort: number) {
+    const indexToRemove = this.connections.findIndex(
+      (connection) =>
+        connection.remotePort === remotePort &&
+        connection.remoteAddress === remoteAddress
+    );
+
+    if(indexToRemove > -1) {
+      // funcao slice retorna um novo array, nao modifica o anterior
+      // por isso essa nova atribuicao
+      const newArr = this.connections.slice(indexToRemove, 1);
+      this.connections = newArr;
+    } else {
+      console.log('nothing to remove');
+    }
   }
 
   private checkIfServerAlreadyExists(address: string, port: number): boolean {

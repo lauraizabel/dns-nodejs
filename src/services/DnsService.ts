@@ -1,46 +1,60 @@
 import net from "net";
-import { scoped, registry, Lifecycle, inject } from "tsyringe";
+import DnsServiceInterface from "../interfaces/DnsServiceInterface";
 import { DnsDataInterface } from "../interfaces/DnsDataInterface";
-import FileService from "./FileService";
 
-@scoped(Lifecycle.ResolutionScoped)
-@registry([{ token: "DnsService", useClass: DnsService }])
-export default class DnsService {
-  constructor(@inject("FileService") private fileService: FileService) {}
+export default class DnsService implements DnsServiceInterface {
+  private connections: DnsDataInterface[] = [];
 
-  async start(): Promise<any> {
-    this.createDns();
-    await this.getIpAndPort("setapproval");
+  public initDns(): void {
+    const dns = net.createServer((connection) => {
+      this.createConnection(connection);
+    });
+
+    dns.listen(1234, function () {
+      console.log("server is listening");
+    });
   }
 
-  validateDnsData(data: DnsDataInterface): { valid: boolean } {
-    if (!data.hostname || !data.ip || !data.method || !data.port) {
-      return { valid: false };
+  public getIpAndPort(serviceName: string): string | undefined {
+    const server = this.connections.find(
+      (connection) => connection.serviceName === serviceName
+    );
+
+    if (!server) {
+      return;
     }
 
-    return { valid: true };
+    return `${server.address}:${server.port}`;
   }
 
-  async handleOnData(data: DnsDataInterface) {
-    const { hostname, ip, method, port } = data;
+  private validateDnsData(data: DnsDataInterface): boolean {
+    if (!data.address || !data.serviceName || !data.method || !data.port) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private handleOnData(data: DnsDataInterface): void {
+    const { address, serviceName, method, port } = data;
 
     if (method === "SET") {
-      await this.saveServer(`${hostname} ${ip} ${port}\r\n`);
+      this.saveServer(data);
     } else {
-      await this.getIpAndPort(hostname);
+      this.getIpAndPort(data.serviceName);
     }
   }
 
-  createConnection(connection: net.Socket) {
+  private createConnection(connection: net.Socket): void {
     console.log("client connected");
 
     connection.on("data", (data) => {
       const info: DnsDataInterface = JSON.parse(data.toString());
 
-      const { valid } = this.validateDnsData(info);
+      const isValid = this.validateDnsData(info);
 
-      if (!valid) {
-        console.log("Error data");
+      if (!isValid) {
+        console.log("Error when try to validate data");
         connection.write("ERROR DATA");
         return;
       }
@@ -55,42 +69,22 @@ export default class DnsService {
     connection.pipe(connection);
   }
 
-  createDns() {
-    const dns = net.createServer((connection) => {
-      this.createConnection(connection);
-    });
+  private checkIfServerAlreadyExists(address: string, port: number): boolean {
+    const server = this.connections.find(
+      (connection) => connection.address === address && connection.port === port
+    );
 
-    dns.listen(1234, function () {
-      console.log("server is listening");
-    });
+    return Boolean(server);
   }
 
-  async checkIfServerAlreadyExists(serverParams: string) {
-    const hostname = serverParams.split(" ")[0];
-    const existServer = await this.getIpAndPort(hostname);
-    if (existServer) return true;
-    return false;
-  }
-
-  async saveServer(serverParams: string) {
-    const existServer = await this.checkIfServerAlreadyExists(serverParams);
+  private saveServer(data: DnsDataInterface): void {
+    const existServer = this.checkIfServerAlreadyExists(
+      data.address,
+      data.port
+    );
 
     if (existServer) return;
 
-    await this.fileService.writeFile("hosts.txt", serverParams);
-  }
-
-  async getIpAndPort(hostname: string) {
-    const fileString = await this.fileService.getContentFromFile("hosts.txt");
-
-    const lines = fileString.split("\r\n");
-
-    const formattedLines = lines.map((line) => line.split(" "));
-
-    const serverData = formattedLines.find((line) => line[0] === hostname);
-
-    if (!serverData) return;
-
-    return `${serverData[1]}:${serverData[2]}`;
+    this.connections.push(data);
   }
 }

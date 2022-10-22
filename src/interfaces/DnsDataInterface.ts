@@ -1,6 +1,6 @@
 export interface DnsDataInterface {
   method: "SET" | "GET";
-  hostname: string;
-  ip: string;
+  serviceName: string;
+  address: string;
   port: number;
 }

@@ -1,9 +1,7 @@
-import "reflect-metadata";
 import DnsService from "./services/DnsService";
-import FileService from "./services/FileService";
 
-const fileService = new FileService();
+const app = new DnsService();
 
-const app = new DnsService(fileService);
+app.initDns();
 
-export default app.start();
+export default app;

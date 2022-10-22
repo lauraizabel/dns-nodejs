@@ -45,27 +45,35 @@ export default class DnsService implements DnsServiceInterface {
     }
   }
 
+  // Faltam implementar essas duas funcoes
+  private handleSetData(data: DnsDataInterface) {}
+  private handleGetData(data: DnsDataInterface) {}
+
   private createConnection(connection: net.Socket): void {
     console.log("client connected");
 
     connection.on("data", (data) => {
       const info: DnsDataInterface = JSON.parse(data.toString());
 
-      const isValid = this.validateDnsData(info);
+      if (info?.method === "SET") {
+        const isValid = this.validateDnsData(info);
+        if (!isValid) {
+          console.log("Error when try to validate data");
+          connection.write("ERROR DATA");
+          return;
+        }
 
-      if (!isValid) {
-        console.log("Error when try to validate data");
-        connection.write("ERROR DATA");
-        return;
-      }
-      const { remoteAddress, remotePort } = connection;
-      // esses dois so nao vao existir se a conexao for encerrada ou destruida
-      if (remoteAddress && remotePort) {
-        this.handleOnData({
-          ...info,
-          remoteAddress: remoteAddress,
-          remotePort,
-        });
+        const { remoteAddress, remotePort } = connection;
+
+        // esses dois so nao vao existir se a conexao for encerrada ou destruida
+        if (remoteAddress && remotePort) {
+          this.handleOnData({
+            ...info,
+            remoteAddress: remoteAddress,
+            remotePort,
+          });
+        }
+      } else {
       }
     });
 
@@ -88,13 +96,13 @@ export default class DnsService implements DnsServiceInterface {
         connection.remoteAddress === remoteAddress
     );
 
-    if(indexToRemove > -1) {
+    if (indexToRemove > -1) {
       // funcao slice retorna um novo array, nao modifica o anterior
       // por isso essa nova atribuicao
       const newArr = this.connections.slice(indexToRemove, 1);
       this.connections = newArr;
     } else {
-      console.log('nothing to remove');
+      console.log("nothing to remove");
     }
   }
 

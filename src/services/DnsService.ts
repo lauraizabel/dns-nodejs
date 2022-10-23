@@ -19,11 +19,9 @@ export default class DnsService implements DnsServiceInterface {
     const server = this.connections.find(
       (connection) => connection.serviceName === serviceName
     );
-
     if (!server) {
       return;
     }
-
     return `${server.address}:${server.port}`;
   }
 
@@ -35,13 +33,12 @@ export default class DnsService implements DnsServiceInterface {
     return true;
   }
 
-  private handleOnData(data: DnsDataInterface): void {
+  private handleOnData(data: DnsDataInterface): any {
     const { method } = data;
-
     if (method === "SET") {
       this.saveServer(data);
     } else {
-      this.getIpAndPort(data.serviceName);
+      return this.getIpAndPort(data.serviceName);
     }
   }
 
@@ -49,12 +46,12 @@ export default class DnsService implements DnsServiceInterface {
   private handleSetData(data: DnsDataInterface) {}
   private handleGetData(data: DnsDataInterface) {}
 
-  private createConnection(connection: net.Socket): void {
+  private createConnection(connection: net.Socket): any {
     console.log("client connected");
 
     connection.on("data", (data) => {
+      console.log("DATA: ",JSON.parse(data.toString()))
       const info: DnsDataInterface = JSON.parse(data.toString());
-
       if (info?.method === "SET") {
         const isValid = this.validateDnsData(info);
         if (!isValid) {
@@ -62,22 +59,35 @@ export default class DnsService implements DnsServiceInterface {
           connection.write("ERROR DATA");
           return;
         }
-
-        const { remoteAddress, remotePort } = connection;
-
-        // esses dois so nao vao existir se a conexao for encerrada ou destruida
-        if (remoteAddress && remotePort) {
-          this.handleOnData({
-            ...info,
-            remoteAddress: remoteAddress,
-            remotePort,
-          });
-        }
-      } else {
+      }
+      const { remoteAddress, remotePort } = connection;
+      // esses dois so nao vao existir se a conexao for encerrada ou destruida
+      if (remoteAddress && remotePort) {
+        const data = this.handleOnData({
+          ...info,
+          remoteAddress: remoteAddress,
+          remotePort,
+        });
+        if (data) {
+          console.log(data)
+          connection.write(
+            'HTTP/1.0 200 OK\r\n' +
+            '\r\n'
+        );
+          connection.write(data.toString())
+        };
       }
     });
 
     connection.on("end", () => {
+      console.log("client disconnected");
+      const { remoteAddress, remotePort } = connection;
+      // esses dois so nao vao existir se a conexao for encerrada ou destruida
+      if (remoteAddress && remotePort) {
+        this.removeServer(remoteAddress, remotePort);
+      }
+    });
+    connection.on("error", () => {
       console.log("client disconnected");
       const { remoteAddress, remotePort } = connection;
       // esses dois so nao vao existir se a conexao for encerrada ou destruida

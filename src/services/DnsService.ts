@@ -16,12 +16,16 @@ export default class DnsService implements DnsServiceInterface {
   }
 
   public getIpAndPort(serviceName: string): string | undefined {
-    const server = this.connections.find(
+    const allServers = this.connections.filter(
       (connection) => connection.serviceName === serviceName
     );
-    if (!server) {
+
+    if (allServers.length === 0) {
       return;
     }
+
+    const server = allServers[Math.floor(Math.random() * allServers.length)];
+
     return `${server.address}:${server.port}`;
   }
 
@@ -42,15 +46,11 @@ export default class DnsService implements DnsServiceInterface {
     }
   }
 
-  // Faltam implementar essas duas funcoes
-  private handleSetData(data: DnsDataInterface) {}
-  private handleGetData(data: DnsDataInterface) {}
-
   private createConnection(connection: net.Socket): any {
     console.log("client connected");
 
     connection.on("data", (data) => {
-      console.log("DATA: ",JSON.parse(data.toString()))
+      console.log("RECEIVED: ", JSON.parse(data.toString()));
       const info: DnsDataInterface = JSON.parse(data.toString());
       if (info?.method === "SET") {
         const isValid = this.validateDnsData(info);
@@ -63,30 +63,27 @@ export default class DnsService implements DnsServiceInterface {
       const { remoteAddress, remotePort } = connection;
       // esses dois so nao vao existir se a conexao for encerrada ou destruida
       if (remoteAddress && remotePort) {
-        const data = this.handleOnData({
+        const requestedData = this.handleOnData({
           ...info,
           remoteAddress: remoteAddress,
           remotePort,
         });
-        if (data) {
-          console.log(data)
-          connection.write(
-            'HTTP/1.0 200 OK\r\n' +
-            '\r\n'
-        );
-          connection.write(data.toString())
-        };
+        if (requestedData) {
+          console.log(requestedData);
+          connection.write(requestedData.toString());
+        }
       }
     });
 
     connection.on("end", () => {
       console.log("client disconnected");
       const { remoteAddress, remotePort } = connection;
-      // esses dois so nao vao existir se a conexao for encerrada ou destruida
+
       if (remoteAddress && remotePort) {
         this.removeServer(remoteAddress, remotePort);
       }
     });
+
     connection.on("error", () => {
       console.log("client disconnected");
       const { remoteAddress, remotePort } = connection;
@@ -111,8 +108,6 @@ export default class DnsService implements DnsServiceInterface {
       // por isso essa nova atribuicao
       const newArr = this.connections.slice(indexToRemove, 1);
       this.connections = newArr;
-    } else {
-      console.log("nothing to remove");
     }
   }
 
